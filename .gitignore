@@ -1,32 +1,60 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
+# Arquivos de objeto
 *.o
+*.ko
 *.obj
+*.elf
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
+# Arquivos de biblioteca
 *.lib
+*.a
+*.la
+*.lo
 
-# Executables
+# Executáveis
 *.exe
 *.out
 *.app
+*.i*86
+*.x86_64
+*.hex
+SistemaSolar
+
+# Arquivos de debug
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Diretórios de build
+build/
+Debug/
+Release/
+
+# Arquivos gerados automaticamente
+Makefile.in
+aclocal.m4
+autom4te.cache/
+compile
+config.guess
+config.h.in
+config.sub
+configure
+depcomp
+install-sh
+missing
+stamp-h1
+
+# Arquivos específicos do IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Arquivos temporários
+*.tmp
+*.bak
+*.log
+
+# Outros
+.DS_Store
+Thumbs.db 
