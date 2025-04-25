@@ -19,13 +19,23 @@ static GLubyte checkImage[checkImageHeight][checkImageWidth][4];
 
 #ifdef GL_VERSION_1_1
 static GLuint texName;
-static GLuint groundTexName;
+static GLuint earthTexName;
+static GLuint sunTexName;     // Textura para o sol
+static GLuint moonTexName;    // Textura para a lua
 #endif
+
+// Constante gravitacional
+const float G = 6.67430e-11;  // Constante gravitacional em m^3 kg^-1 s^-2
+
+// Variáveis da janela
+int windowWidth = 800;
+int windowHeight = 600;
+bool fullscreen = false;
 
 // Variáveis de posição da câmera
 float cameraX = 0.0f;
-float cameraY = 0.0f;
-float cameraZ = -3.6f;
+float cameraY = 5.0f;
+float cameraZ = -15.0f;        // Afastei a câmera para mostrar os objetos
 float cameraSpeed = 0.1f;
 
 // Variáveis de rotação da câmera
@@ -35,34 +45,71 @@ int lastMouseX = -1;
 int lastMouseY = -1;
 float mouseSensitivity = 0.2f;
 
+// Variáveis para captura do mouse
+bool mouseActive = true; // Se o movimento do mouse está ativo
+
 // Vetores da câmera para movimento
 float forwardX, forwardY, forwardZ;  // Vetor para frente
 float rightX, rightY, rightZ;        // Vetor para direita
 float upX, upY, upZ;                 // Vetor para cima
 
+// Definição do tipo de objeto celeste
+typedef struct {
+    float posX, posY, posZ;     // Posição
+    float velX, velY, velZ;     // Velocidade
+    float accX, accY, accZ;     // Aceleração
+    float mass;                // Massa em kg
+    float radius;              // Raio em unidades GL
+    float rotationAngle;       // Ângulo de rotação em torno do próprio eixo
+    float rotationSpeed;       // Velocidade de rotação
+    GLuint texture;            // Textura do objeto
+    float r, g, b;             // Cor do objeto (para backup se não tiver textura)
+    bool fixed;                // Se o objeto está fixo no espaço (não se move pela gravidade)
+} CelestialObject;
+
+// Array de objetos celestes
+#define MAX_OBJECTS 10
+CelestialObject objects[MAX_OBJECTS];
+int objectCount = 0;
+
 // Variáveis de física
-float sphereY = 4.0f;         // Altura inicial da esfera - aumentada para acomodar o raio maior
-float sphereVelocity = 0.0f;  // Velocidade inicial
-float gravity = 0.005f;       // Aceleração da gravidade
-float groundY = -1.5f;        // Posição do chão
-float restitution = 0.7f;     // Fator de quique (0-1), 1 = quique perfeito
-float stopThreshold = 0.001f; // Limite de velocidade para parar de quicar
-bool stopped = false;         // Se a esfera parou
-float sphereRadius = 2.0f;    // Raio da esfera - adicionado como variável
+float timeStep = 1.0f;     // Fator de escala de tempo para ajustar velocidade da simulação
+float scale = 1000000.0f;   // Escala para converter unidades astronômicas em unidades GL
+float rotationAngle = 0.0f; // Ângulo de rotação da Terra ao redor do Sol
+
+// Flags de estado
+int lightEnabled = 1;  // Iluminação habilitada por padrão
+bool simulationPaused = false;
+
+// Propriedades de iluminação
+GLfloat lightAmbient[] = { 0.5f, 0.5f, 0.5f, 1.0f };  // Luz ambiente aumentada
+GLfloat lightDiffuse[] = { 1.0f, 1.0f, 0.8f, 1.0f };  // Luz difusa amarelada para o sol
+GLfloat lightSpecular[] = { 1.0f, 1.0f, 1.0f, 1.0f }; // Componente especular branca
+GLfloat lightPosition[4];                            // Posição da luz, será atualizada durante o rendering
 
 // Protótipos de funções
 void updateCamera();
 void calculateCameraVectors();
 void updatePhysics();
-void drawGround();
-void loadGroundTexture();
+void loadEarthTexture();
+void loadSunTexture();
+void loadMoonTexture();
+void setupLighting();
+void toggleFullscreen();
+void resizeWindow(int width, int height);
+void addCelestialObject(float posX, float posY, float posZ, 
+                       float velX, float velY, float velZ,
+                       float mass, float radius, GLuint texture,
+                       float r, float g, float b, bool fixed);
+void updateGravitationalForces();
 
-void loadTexture(const char* filename) {
+// Função genérica para carregar texturas
+void loadTexture(const char* filename, GLuint* texId) {
     int width, height, nrChannels;
     unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
     if (data) {
-        glGenTextures(1, &texName);
-        glBindTexture(GL_TEXTURE_2D, texName);
+        glGenTextures(1, texId);
+        glBindTexture(GL_TEXTURE_2D, *texId);
         // Configurar parâmetros de wrapping e filtragem da textura
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -83,58 +130,260 @@ void loadTexture(const char* filename) {
     }
 }
 
-void loadGroundTexture() {
-    int width, height, nrChannels;
-    unsigned char* data = stbi_load("texture_image.jpg", &width, &height, &nrChannels, 0);
-    if (data) {
-        glGenTextures(1, &groundTexName);
-        glBindTexture(GL_TEXTURE_2D, groundTexName);
-        // Configurar parâmetros de wrapping e filtragem da textura
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        // Carregar os dados da textura
-        if (nrChannels == 3) {
-            gluBuild2DMipmaps(GL_TEXTURE_2D, GL_RGB, width, height, GL_RGB, GL_UNSIGNED_BYTE, data);
-        } else if (nrChannels == 4) {
-            gluBuild2DMipmaps(GL_TEXTURE_2D, GL_RGBA, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        }
-        stbi_image_free(data);
+void loadEarthTexture() {
+    loadTexture("earth_texture.jpg", &earthTexName);
+}
+
+void loadSunTexture() {
+    loadTexture("sun_texture.jpg", &sunTexName);
+}
+
+void loadMoonTexture() {
+    loadTexture("moon_texture.jpg", &moonTexName);
+}
+
+// Configurar iluminação
+void setupLighting() {
+    // Habilitar iluminação
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    
+    // Definir propriedades da luz
+    glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmbient);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDiffuse);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, lightSpecular);
+    
+    // Definir propriedades do material padrão
+    GLfloat materialAmbient[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+    GLfloat materialDiffuse[] = { 0.8f, 0.8f, 0.8f, 1.0f };
+    GLfloat materialSpecular[] = { 0.5f, 0.5f, 0.5f, 1.0f };
+    GLfloat materialShininess[] = { 50.0f };
+    
+    glMaterialfv(GL_FRONT, GL_AMBIENT, materialAmbient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, materialDiffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, materialSpecular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, materialShininess);
+    
+    // Habilitar materiais
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
+    
+    // Outros estados do OpenGL para renderização mais realista
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_NORMALIZE);
+    
+    // Garantir que a iluminação está no estado correto de acordo com a flag
+    if (lightEnabled) {
+        glEnable(GL_LIGHTING);
     } else {
-        fprintf(stderr, "Falha ao carregar textura do chão\n");
+        glDisable(GL_LIGHTING);
+    }
+}
+
+// Alternar modo tela cheia
+void toggleFullscreen() {
+    fullscreen = !fullscreen;
+    if (fullscreen) {
+        glutFullScreen(); // Entrar em modo tela cheia
+    } else {
+        glutReshapeWindow(windowWidth, windowHeight); // Voltar para janela
+        glutPositionWindow(100, 100); // Reposicionar a janela
+    }
+}
+
+// Redimensionar a janela
+void resizeWindow(int width, int height) {
+    if (!fullscreen) {
+        windowWidth = width;
+        windowHeight = height;
+    }
+    
+    glViewport(0, 0, (GLsizei)width, (GLsizei)height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(60.0, (GLfloat)width / (GLfloat)height, 0.1, 1000.0); // Aumentado o far plane
+    
+    calculateCameraVectors();
+    
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    
+    // Aplicar rotações primeiro (yaw em torno do eixo Y, pitch em torno do eixo X)
+    glRotatef(cameraPitch, 1.0f, 0.0f, 0.0f);
+    glRotatef(cameraYaw, 0.0f, 1.0f, 0.0f);
+    
+    // Depois aplicar translação
+    glTranslatef(cameraX, cameraY, cameraZ);
+}
+
+// Adicionar um objeto celeste ao sistema
+void addCelestialObject(float posX, float posY, float posZ, 
+                       float velX, float velY, float velZ,
+                       float mass, float radius, GLuint texture,
+                       float r, float g, float b, bool fixed) {
+    if (objectCount < MAX_OBJECTS) {
+        CelestialObject obj = {
+            .posX = posX, .posY = posY, .posZ = posZ,
+            .velX = velX, .velY = velY, .velZ = velZ,
+            .accX = 0.0f, .accY = 0.0f, .accZ = 0.0f,
+            .mass = mass,
+            .radius = radius,
+            .rotationAngle = 0.0f,
+            .rotationSpeed = 1.0f, // velocidade padrão de rotação
+            .texture = texture,
+            .r = r, .g = g, .b = b,
+            .fixed = fixed
+        };
+        objects[objectCount++] = obj;
+    } else {
+        printf("Erro: Número máximo de objetos atingido.\n");
+    }
+}
+
+// Atualizar forças gravitacionais entre todos os objetos
+void updateGravitationalForces() {
+    // Resetar acelerações
+    for (int i = 0; i < objectCount; i++) {
+        if (!objects[i].fixed) {
+            objects[i].accX = 0;
+            objects[i].accY = 0;
+            objects[i].accZ = 0;
+        }
+    }
+    
+    // Calcular forças gravitacionais entre todos os pares de objetos
+    for (int i = 0; i < objectCount; i++) {
+        if (objects[i].fixed) continue; // Objetos fixos não se movem
+        
+        for (int j = 0; j < objectCount; j++) {
+            if (i == j) continue; // Pular auto-interação
+            
+            // Calcular vetor distância entre os objetos
+            float dx = objects[j].posX - objects[i].posX;
+            float dy = objects[j].posY - objects[i].posY;
+            float dz = objects[j].posZ - objects[i].posZ;
+            
+            // Distância ao quadrado
+            float distSq = dx*dx + dy*dy + dz*dz;
+            
+            // Evitar divisão por zero ou forças muito grandes quando muito próximos
+            if (distSq < (objects[i].radius + objects[j].radius) * (objects[i].radius + objects[j].radius)) {
+                // Colisão ou objetos muito próximos, podemos implementar depois uma colisão elástica
+                continue;
+            }
+            
+            // Calcular a força da gravidade: F = G * (m1 * m2) / r^2
+            float force = G * objects[i].mass * objects[j].mass / distSq;
+            
+            // Calcular a distância real
+            float dist = sqrt(distSq);
+            
+            // Componentes da aceleração (F = m*a, então a = F/m)
+            // Normalizar o vetor distância para obter a direção
+            float ax = force * dx / (dist * objects[i].mass);
+            float ay = force * dy / (dist * objects[i].mass);
+            float az = force * dz / (dist * objects[i].mass);
+            
+            // Adicionar à aceleração total
+            objects[i].accX += ax * timeStep * scale;
+            objects[i].accY += ay * timeStep * scale;
+            objects[i].accZ += az * timeStep * scale;
+        }
+    }
+}
+
+// Atualizar a física de todos os objetos
+void updatePhysics() {
+    if (simulationPaused) return;
+    
+    // Incrementar o ângulo de rotação da Terra ao redor do Sol
+    // Usar o timeStep para controlar a velocidade
+    rotationAngle += 0.2f * timeStep;
+    if (rotationAngle > 360.0f) {
+        rotationAngle -= 360.0f;
+    }
+    
+    // Atualizar a posição da Terra (objeto índice 1) para girar ao redor do Sol
+    if (objectCount > 1) {
+        float radius = 5.0f; // Distância da Terra ao Sol
+        objects[1].posX = radius * cos(rotationAngle * M_PI / 180.0f);
+        objects[1].posZ = radius * sin(rotationAngle * M_PI / 180.0f);
     }
 }
 
 void init(void) {
     glClearColor(0.0, 0.0, 0.0, 0.0);
-    glShadeModel(GL_FLAT);
+    glShadeModel(GL_SMOOTH); // Sombreamento suave
     glEnable(GL_DEPTH_TEST);
     
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     
-    // Carregar a textura do chão
-    loadGroundTexture();
+    // Carregar as texturas
+    loadEarthTexture();
+    loadSunTexture();
+    loadMoonTexture();
+    
+    // Configurar iluminação
+    setupLighting();
+    
+    // Criar objetos celestes (Sol, Terra)
+    
+    // Sol (fixo no centro)
+    addCelestialObject(
+        0.0f, 0.0f, 0.0f,     // posição
+        0.0f, 0.0f, 0.0f,     // velocidade
+        1.989e30,             // massa do Sol em kg
+        1.5f,                 // raio
+        0,                    // sem textura
+        1.0f, 1.0f, 0.0f,     // cor amarela
+        true                  // fixo, não se move
+    );
+    
+    // Terra (fixa a uma distância do Sol)
+    addCelestialObject(
+        5.0f, 0.0f, 0.0f,     // posição (a 5 unidades do Sol)
+        0.0f, 0.0f, 0.0f,     // velocidade (sem velocidade inicial)
+        5.972e24,             // massa da Terra em kg
+        1.0f,                 // raio
+        earthTexName,         // usar textura da Terra
+        0.0f, 0.5f, 1.0f,     // cor azul (backup)
+        true                  // fixo inicialmente
+    );
+    
+    // Imprimir instruções
+    printf("\n--- Controles do Sistema Solar ---\n");
+    printf("WASD: Movimento da câmera\n");
+    printf("R/G: Subir/descer\n");
+    printf("Mouse: Olhar ao redor\n");
+    printf("M: Alternar controle do mouse\n");
+    printf("L: Alternar iluminação\n");
+    printf("F: Alternar tela cheia\n");
+    printf("[/]: Diminuir/aumentar largura da janela\n");
+    printf("-/+: Diminuir/aumentar altura da janela\n");
+    printf(",/.: Diminuir/aumentar velocidade da simulação\n");
+    printf("P: Pausar/Continuar simulação\n");
+    printf("ESC: Sair\n");
+    printf("----------------------------------\n\n");
 }
 
 // Calcular vetores de direção da câmera com base em yaw e pitch
 void calculateCameraVectors() {
-    // Calcular o novo vetor Forward - corrigir as direções aqui
-    forwardX = -sin(cameraYaw * M_PI / 180.0f) * cos(cameraPitch * M_PI / 180.0f);  // Adicionado negativo
-    forwardY = sin(cameraPitch * M_PI / 180.0f);  // Removido negativo
-    forwardZ = cos(cameraYaw * M_PI / 180.0f) * cos(cameraPitch * M_PI / 180.0f);  // Removido negativo
+    // Calcular o novo vetor Forward
+    forwardX = -sin(cameraYaw * M_PI / 180.0f) * cos(cameraPitch * M_PI / 180.0f);
+    forwardY = sin(cameraPitch * M_PI / 180.0f);
+    forwardZ = cos(cameraYaw * M_PI / 180.0f) * cos(cameraPitch * M_PI / 180.0f);
     
     // Calcular o vetor Right
-    rightX = -cos(cameraYaw * M_PI / 180.0f);  // Adicionado negativo
+    rightX = -cos(cameraYaw * M_PI / 180.0f);
     rightY = 0.0f;
-    rightZ = -sin(cameraYaw * M_PI / 180.0f);  // Adicionado negativo
+    rightZ = -sin(cameraYaw * M_PI / 180.0f);
     
     // Calcular o vetor Up usando produto vetorial
-    upX = forwardY * rightZ - forwardZ * rightY;  // Fórmula alterada
-    upY = forwardZ * rightX - forwardX * rightZ;  // Fórmula alterada
-    upZ = forwardX * rightY - forwardY * rightX;  // Fórmula alterada
+    upX = forwardY * rightZ - forwardZ * rightY;
+    upY = forwardZ * rightX - forwardX * rightZ;
+    upZ = forwardX * rightY - forwardY * rightX;
     
-    // Normalizar vetores (não é estritamente necessário para este caso simples)
+    // Normalizar vetores
     float lenForward = sqrt(forwardX*forwardX + forwardY*forwardY + forwardZ*forwardZ);
     forwardX /= lenForward;
     forwardY /= lenForward;
@@ -167,87 +416,86 @@ void updateCamera() {
     glutPostRedisplay();
 }
 
-// Atualizar simulação física para a esfera
-void updatePhysics() {
-    if (!stopped) {
-        // Aplicar gravidade
-        sphereVelocity -= gravity;
-        
-        // Atualizar posição
-        sphereY += sphereVelocity;
-        
-        // Verificar colisão com o chão
-        if (sphereY - sphereRadius <= groundY) { // Usar sphereRadius em vez de 1.0f codificado
-            // Colisão detectada, quicar
-            sphereY = groundY + sphereRadius; // Colocar esfera no chão com raio correto
-            
-            // Aplicar quique (inverter velocidade com amortecimento)
-            sphereVelocity = -sphereVelocity * restitution;
-            
-            // Verificar se a esfera deve parar de quicar
-            if (fabs(sphereVelocity) < stopThreshold) {
-                sphereVelocity = 0.0f;
-                sphereY = groundY + sphereRadius; // Usar sphereRadius
-                stopped = true;
-            }
-        }
-    }
-}
-
-void drawGround() {
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, groundTexName);
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-    
-    glColor3f(0.8f, 0.8f, 0.8f); // Chão cinza claro
-    
-    // Desenhar plano do chão (quad grande)
-    glBegin(GL_QUADS);
-    glTexCoord2f(0.0f, 0.0f); glVertex3f(-10.0f, groundY, -10.0f);
-    glTexCoord2f(10.0f, 0.0f); glVertex3f(-10.0f, groundY, 10.0f);
-    glTexCoord2f(10.0f, 10.0f); glVertex3f(10.0f, groundY, 10.0f);
-    glTexCoord2f(0.0f, 10.0f); glVertex3f(10.0f, groundY, -10.0f);
-    glEnd();
-    
-    glDisable(GL_TEXTURE_2D);
-}
-
 void display(void) {
     // Atualizar física
     updatePhysics();
     
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
-    // Desenhar chão
-    drawGround();
+    // Atualizar posição da luz para estar no centro do sol
+    if (objectCount > 0) {
+        lightPosition[0] = objects[0].posX;
+        lightPosition[1] = objects[0].posY;
+        lightPosition[2] = objects[0].posZ;
+        lightPosition[3] = 1.0f;
+        glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
+    }
     
-    // Desenhar esfera
-    glEnable(GL_TEXTURE_2D);
-    loadTexture("texture_image.jpg");
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-    glColor3f(1.0, 0.0, 0.0);
+    // Configurar iluminação global
+    if (lightEnabled) {
+        glEnable(GL_LIGHTING);
+        glEnable(GL_LIGHT0);
+    } else {
+        glDisable(GL_LIGHTING);
+        glDisable(GL_LIGHT0);
+    }
     
-    // Posicionar e desenhar a esfera
-    glPushMatrix();
-    glTranslatef(0.0f, sphereY, 0.0f);
-    GLUquadric* quad = gluNewQuadric();
-    gluQuadricTexture(quad, GL_TRUE);
-    gluSphere(quad, sphereRadius, 32, 32);
-    gluDeleteQuadric(quad);
-    glPopMatrix();
+    // Desenhar cada objeto celeste
+    for (int i = 0; i < objectCount; i++) {
+        CelestialObject* obj = &objects[i];
+        
+        // O sol (primeiro objeto) é autoluminoso, desligar iluminação para ele
+        if (i == 0) {
+            glDisable(GL_LIGHTING);
+        } else if (lightEnabled) {
+            glEnable(GL_LIGHTING);
+        }
+        
+        // Usar textura se o objeto tiver uma textura válida
+        if (obj->texture > 0) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, obj->texture);
+            glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        } else {
+            glDisable(GL_TEXTURE_2D);
+        }
+        
+        // Definir cor (será usada como fator de multiplicação para a textura)
+        glColor3f(obj->r, obj->g, obj->b);
+        
+        // Posicionar e desenhar o objeto
+        glPushMatrix();
+        glTranslatef(obj->posX, obj->posY, obj->posZ);
+        
+        // Criar uma esfera para o objeto
+        GLUquadric* quadric = gluNewQuadric();
+        gluQuadricTexture(quadric, GL_TRUE);
+        gluQuadricNormals(quadric, GLU_SMOOTH);
+        gluSphere(quadric, obj->radius, 32, 32);
+        gluDeleteQuadric(quadric);
+        
+        glPopMatrix();
+    }
     
-    glFlush();
     glDisable(GL_TEXTURE_2D);
+    
+    // Usar double buffering para animação mais suave
+    glutSwapBuffers();
     
     // Solicitar redesenho para animação
     glutPostRedisplay();
 }
 
 void reshape(int w, int h) {
+    if (!fullscreen) {
+        windowWidth = w;
+        windowHeight = h;
+    }
+    
     glViewport(0, 0, (GLsizei)w, (GLsizei)h);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(60.0, (GLfloat)w / (GLfloat)h, 1.0, 30.0);
+    gluPerspective(60.0, (GLfloat)w / (GLfloat)h, 0.1, 1000.0);
     
     calculateCameraVectors();
     
@@ -293,7 +541,7 @@ void keyboard(unsigned char key, int x, int y) {
             cameraZ -= rightZ * moveSpeed;
             updateCamera();
             break;
-        case 'f': // Mover para baixo em relação ao mundo
+        case 'g': // Mover para baixo em relação ao mundo
             cameraX -= upX * moveSpeed;
             cameraY -= upY * moveSpeed;
             cameraZ -= upZ * moveSpeed;
@@ -305,10 +553,69 @@ void keyboard(unsigned char key, int x, int y) {
             cameraZ += upZ * moveSpeed;
             updateCamera();
             break;
-        case ' ': // Resetar física da esfera quando a barra de espaço é pressionada
-            sphereY = 4.0f; // Aumentado para acomodar o raio maior
-            sphereVelocity = 0.0f;
-            stopped = false;
+        case 'f': // Alternar tela cheia
+            toggleFullscreen();
+            break;
+        case 'p': // Pausar/Continuar simulação
+        case 'P':
+            simulationPaused = !simulationPaused;
+            if (simulationPaused) {
+                printf("Simulação: PAUSADA\n");
+            } else {
+                printf("Simulação: ATIVA\n");
+            }
+            break;
+        case 'm': // Alternar ativação do controle do mouse
+            mouseActive = !mouseActive;
+            if (mouseActive) {
+                printf("Controle da câmera com o mouse: ATIVADO\n");
+            } else {
+                printf("Controle da câmera com o mouse: DESATIVADO\n");
+            }
+            break;
+        case '+': // Aumentar altura da janela
+            if (!fullscreen) {
+                windowHeight += 50;
+                resizeWindow(windowWidth, windowHeight);
+            }
+            break;
+        case '-': // Diminuir altura da janela
+            if (!fullscreen && windowHeight > 200) {
+                windowHeight -= 50;
+                resizeWindow(windowWidth, windowHeight);
+            }
+            break;
+        case ']': // Aumentar largura da janela
+            if (!fullscreen) {
+                windowWidth += 50;
+                resizeWindow(windowWidth, windowHeight);
+            }
+            break;
+        case '[': // Diminuir largura da janela
+            if (!fullscreen && windowWidth > 200) {
+                windowWidth -= 50;
+                resizeWindow(windowWidth, windowHeight);
+            }
+            break;
+        case 'L': // Alternar iluminação
+        case 'l':
+            lightEnabled = !lightEnabled;
+            if (lightEnabled) {
+                glEnable(GL_LIGHTING);
+                printf("Iluminação: ATIVADA\n");
+            } else {
+                glDisable(GL_LIGHTING);
+                printf("Iluminação: DESATIVADA\n");
+            }
+            break;
+        case '.': // Aumentar velocidade da simulação
+            timeStep *= 1.2f;
+            printf("Velocidade da simulação: %.2f\n", timeStep);
+            break;
+        case ',': // Diminuir velocidade da simulação
+            timeStep /= 1.2f;
+            if (timeStep < 0.1f) timeStep = 0.1f; // Mínimo de 0.1
+            printf("Velocidade da simulação: %.2f\n", timeStep);
             break;
         default:
             break;
@@ -316,20 +623,22 @@ void keyboard(unsigned char key, int x, int y) {
 }
 
 void mouseMotion(int x, int y) {
-    if (lastMouseX >= 0 && lastMouseY >= 0) {
-        // Calcular quanto o mouse se moveu
-        int deltaX = x - lastMouseX;
-        int deltaY = y - lastMouseY;
-        
-        // Atualizar ângulos da câmera
-        cameraYaw += deltaX * mouseSensitivity;
-        cameraPitch += deltaY * mouseSensitivity;
-        
-        // Limitar pitch para evitar inversão
-        if (cameraPitch > 89.0f) cameraPitch = 89.0f;
-        if (cameraPitch < -89.0f) cameraPitch = -89.0f;
-        
-        updateCamera();
+    if (mouseActive) {
+        if (lastMouseX >= 0 && lastMouseY >= 0) {
+            // Calcular quanto o mouse se moveu
+            int deltaX = x - lastMouseX;
+            int deltaY = y - lastMouseY;
+            
+            // Atualizar ângulos da câmera
+            cameraYaw += deltaX * mouseSensitivity;
+            cameraPitch += deltaY * mouseSensitivity;
+            
+            // Limitar pitch para evitar inversão
+            if (cameraPitch > 89.0f) cameraPitch = 89.0f;
+            if (cameraPitch < -89.0f) cameraPitch = -89.0f;
+            
+            updateCamera();
+        }
     }
     
     lastMouseX = x;
@@ -346,17 +655,18 @@ void mouseEntry(int state) {
 
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowSize(800, 600); // Janela maior
+    // Usar double buffering para animação mais suave
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    glutInitWindowSize(windowWidth, windowHeight);
     glutInitWindowPosition(100, 100);
-    glutCreateWindow(argv[0]);
+    glutCreateWindow("Sistema Solar Gravitacional");
     init();
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutKeyboardFunc(keyboard);
-    glutMotionFunc(mouseMotion);     // Rastrear movimento do mouse enquanto botão pressionado
-    glutPassiveMotionFunc(mouseMotion); // Rastrear movimento do mouse quando nenhum botão pressionado
-    glutEntryFunc(mouseEntry);       // Rastrear quando o mouse entra/sai da janela
+    glutMotionFunc(mouseMotion);
+    glutPassiveMotionFunc(mouseMotion);
+    glutEntryFunc(mouseEntry);
     glutMainLoop();
     return 0;
 }
