@@ -22,6 +22,13 @@ static GLuint texName;
 static GLuint earthTexName;
 static GLuint sunTexName;     // Textura para o sol
 static GLuint moonTexName;    // Textura para a lua
+static GLuint mercuryTexName; // Textura para Mercúrio
+static GLuint venusTexName;   // Textura para Vênus
+static GLuint marsTexName;    // Textura para Marte
+static GLuint jupiterTexName; // Textura para Júpiter
+static GLuint saturnTexName;  // Textura para Saturno
+static GLuint uranusTexName;  // Textura para Urano
+static GLuint neptuneTexName; // Textura para Netuno
 #endif
 
 // Constante gravitacional
@@ -34,9 +41,9 @@ bool fullscreen = false;
 
 // Variáveis de posição da câmera
 float cameraX = 0.0f;
-float cameraY = 5.0f;
-float cameraZ = -15.0f;        // Afastei a câmera para mostrar os objetos
-float cameraSpeed = 0.1f;
+float cameraY = 30.0f;
+float cameraZ = -60.0f;        // Afastei a câmera para mostrar os objetos
+float cameraSpeed = 1.0f;
 
 // Variáveis de rotação da câmera
 float cameraYaw = 0.0f;   // Rotação em torno do eixo Y (esquerda-direita)
@@ -75,7 +82,7 @@ int objectCount = 0;
 // Variáveis de física
 float timeStep = 1.0f;     // Fator de escala de tempo para ajustar velocidade da simulação
 float scale = 1000000.0f;   // Escala para converter unidades astronômicas em unidades GL
-float rotationAngle = 0.0f; // Ângulo de rotação da Terra ao redor do Sol
+float rotationAngles[MAX_OBJECTS]; // Ângulos de rotação para cada planeta
 
 // Flags de estado
 int lightEnabled = 1;  // Iluminação habilitada por padrão
@@ -94,6 +101,13 @@ void updatePhysics();
 void loadEarthTexture();
 void loadSunTexture();
 void loadMoonTexture();
+void loadMercuryTexture();
+void loadVenusTexture();
+void loadMarsTexture();
+void loadJupiterTexture();
+void loadSaturnTexture();
+void loadUranusTexture();
+void loadNeptuneTexture();
 void setupLighting();
 void toggleFullscreen();
 void resizeWindow(int width, int height);
@@ -131,15 +145,43 @@ void loadTexture(const char* filename, GLuint* texId) {
 }
 
 void loadEarthTexture() {
-    loadTexture("earth_texture.jpg", &earthTexName);
+    loadTexture("texturas/2k_earth_daymap.jpg", &earthTexName);
 }
 
 void loadSunTexture() {
-    loadTexture("sun_texture.jpg", &sunTexName);
+    loadTexture("texturas/2k_sun.jpg", &sunTexName);
 }
 
 void loadMoonTexture() {
     loadTexture("moon_texture.jpg", &moonTexName);
+}
+
+void loadMercuryTexture() {
+    loadTexture("texturas/2k_mercury.jpg", &mercuryTexName);
+}
+
+void loadVenusTexture() {
+    loadTexture("texturas/2k_venus_surface.jpg", &venusTexName);
+}
+
+void loadMarsTexture() {
+    loadTexture("texturas/2k_mars.jpg", &marsTexName);
+}
+
+void loadJupiterTexture() {
+    loadTexture("texturas/2k_jupiter.jpg", &jupiterTexName);
+}
+
+void loadSaturnTexture() {
+    loadTexture("texturas/2k_saturn.jpg", &saturnTexName);
+}
+
+void loadUranusTexture() {
+    loadTexture("texturas/2k_uranus.jpg", &uranusTexName);
+}
+
+void loadNeptuneTexture() {
+    loadTexture("texturas/2k_neptune.jpg", &neptuneTexName);
 }
 
 // Configurar iluminação
@@ -296,18 +338,49 @@ void updateGravitationalForces() {
 void updatePhysics() {
     if (simulationPaused) return;
     
-    // Incrementar o ângulo de rotação da Terra ao redor do Sol
-    // Usar o timeStep para controlar a velocidade
-    rotationAngle += 0.2f * timeStep;
-    if (rotationAngle > 360.0f) {
-        rotationAngle -= 360.0f;
-    }
+    // Velocidades orbitais relativas (do mais rápido ao mais lento)
+    const float orbitalSpeeds[] = {
+        0.0f,   // Sol (não orbita)
+        4.1f,   // Mercúrio (mais rápido)
+        3.0f,   // Vênus
+        2.5f,   // Terra
+        2.0f,   // Marte
+        1.0f,   // Júpiter
+        0.7f,   // Saturno
+        0.5f,   // Urano
+        0.4f    // Netuno (mais lento)
+    };
     
-    // Atualizar a posição da Terra (objeto índice 1) para girar ao redor do Sol
-    if (objectCount > 1) {
-        float radius = 5.0f; // Distância da Terra ao Sol
-        objects[1].posX = radius * cos(rotationAngle * M_PI / 180.0f);
-        objects[1].posZ = radius * sin(rotationAngle * M_PI / 180.0f);
+    // Distâncias dos planetas ao Sol (definidas na função init)
+    const float orbitalRadii[] = {
+        0.0f,   // Sol (no centro)
+        5.0f,   // Mercúrio
+        7.0f,   // Vênus
+        10.0f,  // Terra
+        15.0f,  // Marte
+        25.0f,  // Júpiter
+        35.0f,  // Saturno
+        45.0f,  // Urano
+        55.0f   // Netuno
+    };
+    
+    // Atualizar a posição de cada planeta (exceto o Sol)
+    for (int i = 1; i < objectCount; i++) {
+        // Incrementar o ângulo de rotação específico deste planeta
+        rotationAngles[i] += orbitalSpeeds[i] * timeStep * 0.2f;
+        if (rotationAngles[i] > 360.0f) {
+            rotationAngles[i] -= 360.0f;
+        }
+        
+        // Atualizar a posição do planeta para orbitar ao redor do Sol
+        objects[i].posX = orbitalRadii[i] * cos(rotationAngles[i] * M_PI / 180.0f);
+        objects[i].posZ = orbitalRadii[i] * sin(rotationAngles[i] * M_PI / 180.0f);
+        
+        // Também atualizar a rotação do próprio planeta
+        objects[i].rotationAngle += objects[i].rotationSpeed * timeStep;
+        if (objects[i].rotationAngle > 360.0f) {
+            objects[i].rotationAngle -= 360.0f;
+        }
     }
 }
 
@@ -322,31 +395,123 @@ void init(void) {
     loadEarthTexture();
     loadSunTexture();
     loadMoonTexture();
+    loadMercuryTexture();
+    loadVenusTexture();
+    loadMarsTexture();
+    loadJupiterTexture();
+    loadSaturnTexture();
+    loadUranusTexture();
+    loadNeptuneTexture();
     
     // Configurar iluminação
     setupLighting();
     
-    // Criar objetos celestes (Sol, Terra)
+    // Limpar o array de objetos celestes
+    objectCount = 0;
+    
+    // Inicializar ângulos de rotação
+    for (int i = 0; i < MAX_OBJECTS; i++) {
+        rotationAngles[i] = 0.0f;
+    }
+    
+    // === Criar objetos celestes (Sol e planetas) ===
     
     // Sol (fixo no centro)
     addCelestialObject(
         0.0f, 0.0f, 0.0f,     // posição
         0.0f, 0.0f, 0.0f,     // velocidade
         1.989e30,             // massa do Sol em kg
-        1.5f,                 // raio
-        0,                    // sem textura
-        1.0f, 1.0f, 0.0f,     // cor amarela
+        3.0f,                 // raio visual
+        sunTexName,           // textura
+        1.0f, 1.0f, 0.0f,     // cor amarela (backup)
         true                  // fixo, não se move
     );
     
-    // Terra (fixa a uma distância do Sol)
+    // Mercúrio
     addCelestialObject(
         5.0f, 0.0f, 0.0f,     // posição (a 5 unidades do Sol)
-        0.0f, 0.0f, 0.0f,     // velocidade (sem velocidade inicial)
+        0.0f, 0.0f, 0.0f,     // velocidade (será calculada na física)
+        3.3011e23,            // massa em kg
+        0.4f,                 // raio visual
+        mercuryTexName,       // textura
+        0.7f, 0.7f, 0.7f,     // cor cinza (backup)
+        true                  // fixo inicialmente
+    );
+    
+    // Vênus
+    addCelestialObject(
+        7.0f, 0.0f, 0.0f,     // posição (a 7 unidades do Sol)
+        0.0f, 0.0f, 0.0f,     // velocidade (será calculada na física)
+        4.8675e24,            // massa em kg
+        0.9f,                 // raio visual
+        venusTexName,         // textura
+        0.9f, 0.7f, 0.0f,     // cor laranja-amarelada (backup)
+        true                  // fixo inicialmente
+    );
+    
+    // Terra
+    addCelestialObject(
+        10.0f, 0.0f, 0.0f,    // posição (a 10 unidades do Sol)
+        0.0f, 0.0f, 0.0f,     // velocidade (será calculada na física)
         5.972e24,             // massa da Terra em kg
         1.0f,                 // raio
-        earthTexName,         // usar textura da Terra
+        earthTexName,         // textura
         0.0f, 0.5f, 1.0f,     // cor azul (backup)
+        true                  // fixo inicialmente
+    );
+    
+    // Marte
+    addCelestialObject(
+        15.0f, 0.0f, 0.0f,    // posição (a 15 unidades do Sol)
+        0.0f, 0.0f, 0.0f,     // velocidade (será calculada na física)
+        6.4171e23,            // massa em kg
+        0.5f,                 // raio visual
+        marsTexName,          // textura
+        1.0f, 0.3f, 0.0f,     // cor vermelha (backup)
+        true                  // fixo inicialmente
+    );
+    
+    // Júpiter
+    addCelestialObject(
+        25.0f, 0.0f, 0.0f,    // posição (a 25 unidades do Sol)
+        0.0f, 0.0f, 0.0f,     // velocidade (será calculada na física)
+        1.8982e27,            // massa em kg
+        2.0f,                 // raio visual
+        jupiterTexName,       // textura
+        0.9f, 0.7f, 0.5f,     // cor bege (backup)
+        true                  // fixo inicialmente
+    );
+    
+    // Saturno
+    addCelestialObject(
+        35.0f, 0.0f, 0.0f,    // posição (a 35 unidades do Sol)
+        0.0f, 0.0f, 0.0f,     // velocidade (será calculada na física)
+        5.6834e26,            // massa em kg
+        1.8f,                 // raio visual
+        saturnTexName,        // textura
+        0.9f, 0.8f, 0.5f,     // cor amarelada (backup)
+        true                  // fixo inicialmente
+    );
+    
+    // Urano
+    addCelestialObject(
+        45.0f, 0.0f, 0.0f,    // posição (a 45 unidades do Sol)
+        0.0f, 0.0f, 0.0f,     // velocidade (será calculada na física)
+        8.6810e25,            // massa em kg
+        1.5f,                 // raio visual
+        uranusTexName,        // textura
+        0.5f, 0.8f, 0.9f,     // cor azul-esverdeada (backup)
+        true                  // fixo inicialmente
+    );
+    
+    // Netuno
+    addCelestialObject(
+        55.0f, 0.0f, 0.0f,    // posição (a 55 unidades do Sol)
+        0.0f, 0.0f, 0.0f,     // velocidade (será calculada na física)
+        1.02413e26,           // massa em kg
+        1.4f,                 // raio visual
+        neptuneTexName,       // textura
+        0.0f, 0.0f, 0.8f,     // cor azul escuro (backup)
         true                  // fixo inicialmente
     );
     
@@ -447,8 +612,14 @@ void display(void) {
         // O sol (primeiro objeto) é autoluminoso, desligar iluminação para ele
         if (i == 0) {
             glDisable(GL_LIGHTING);
+            // Configurar o Sol para emitir luz própria (material emissor)
+            GLfloat emission[] = {1.0f, 0.9f, 0.2f, 1.0f};
+            glMaterialfv(GL_FRONT, GL_EMISSION, emission);
         } else if (lightEnabled) {
             glEnable(GL_LIGHTING);
+            // Desativar emissão para os planetas
+            GLfloat no_emission[] = {0.0f, 0.0f, 0.0f, 1.0f};
+            glMaterialfv(GL_FRONT, GL_EMISSION, no_emission);
         }
         
         // Usar textura se o objeto tiver uma textura válida
@@ -467,6 +638,9 @@ void display(void) {
         glPushMatrix();
         glTranslatef(obj->posX, obj->posY, obj->posZ);
         
+        // Rotação do objeto em torno do próprio eixo
+        glRotatef(obj->rotationAngle, 0.0f, 1.0f, 0.0f);
+        
         // Criar uma esfera para o objeto
         GLUquadric* quadric = gluNewQuadric();
         gluQuadricTexture(quadric, GL_TRUE);
@@ -478,6 +652,10 @@ void display(void) {
     }
     
     glDisable(GL_TEXTURE_2D);
+    
+    // Resetar emissão
+    GLfloat no_emission[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    glMaterialfv(GL_FRONT, GL_EMISSION, no_emission);
     
     // Usar double buffering para animação mais suave
     glutSwapBuffers();

@@ -1,6 +1,14 @@
 # Sistema Solar
 
-Este é um projeto de simulação de Sistema Solar usando OpenGL.
+Este é um projeto de simulação de Sistema Solar usando OpenGL, apresentando todos os planetas do sistema solar orbitando ao redor do Sol.
+
+## Características
+
+- Simulação visual de todos os planetas do sistema solar
+- Texturas realistas obtidas de imagens da NASA
+- Velocidades orbitais proporcionais às reais
+- Iluminação realista vinda do Sol
+- Controles interativos de câmera e velocidade de simulação
 
 ## Requisitos
 
@@ -36,13 +44,23 @@ O projeto inclui um script de compilação simples chamado `run.sh`. Para compil
 
 ## Controles
 
-- Use as teclas W, A, S, D para mover a câmera
-- R: Mover para cima
-- F: Mover para baixo
-- Barra de espaço: Resetar a simulação física
-- ESC: Sair do programa
-- Movimentos do mouse: Olhar ao redor
+- **W, A, S, D**: Mover a câmera horizontalmente
+- **R**: Mover câmera para cima
+- **G**: Mover câmera para baixo
+- **M**: Alternar controle do mouse
+- **L**: Alternar iluminação
+- **F**: Alternar tela cheia
+- **[/]**: Diminuir/aumentar largura da janela
+- **-/+**: Diminuir/aumentar altura da janela
+- **,/.**: Diminuir/aumentar velocidade da simulação
+- **P**: Pausar/Continuar simulação
+- **ESC**: Sair do programa
+- **Mouse**: Olhar ao redor (quando ativado)
+
+## Texturas
+
+O programa utiliza texturas para todos os planetas, armazenadas na pasta `texturas/`. Estas texturas são carregadas automaticamente durante a inicialização do programa.
 
 ## Observações
 
-Certifique-se de que o arquivo de textura `texture_image.jpg` esteja presente no diretório do projeto para que as texturas sejam carregadas corretamente. 
+Este projeto é uma simulação simplificada que prioriza o visual em vez da precisão astronômica completa. As órbitas são aproximadamente circulares e as velocidades são proporcionais, mas não são uma simulação gravitacional precisa. 
