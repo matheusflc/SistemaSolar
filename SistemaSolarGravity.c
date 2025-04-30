@@ -67,7 +67,7 @@ int objectCount = 0;
 double timeStep = 0.01;     // Fator de escala de tempo
 double simulationScale = 1.0e9;  // Escala da simulação: 1 unidade GL = 1 bilhão de metros
 // Fator para amplificar a força gravitacional na simulação visual
-double gravitationalFactor = 50.0;  // 9.0 é um valor alto para tornar o efeito visível
+double gravitationalFactor = 100.0;  // 9.0 é um valor alto para tornar o efeito visível
 
 // Flags de estado
 int lightEnabled = 1;  // Iluminação habilitada por padrão
