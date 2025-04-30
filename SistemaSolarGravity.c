@@ -67,7 +67,7 @@ int objectCount = 0;
 double timeStep = 0.01;     // Fator de escala de tempo
 double simulationScale = 1.0e9;  // Escala da simulação: 1 unidade GL = 1 bilhão de metros
 // Fator para amplificar a força gravitacional na simulação visual
-double gravitationalFactor = 100.0;  // 9.0 é um valor alto para tornar o efeito visível
+double gravitationalFactor = 50.0;  // 9.0 é um valor alto para tornar o efeito visível
 
 // Flags de estado
 int lightEnabled = 1;  // Iluminação habilitada por padrão
@@ -321,7 +321,7 @@ void init(void) {
     // === Criar apenas o Sol e a Terra para a simulação gravitacional ===
     
     // Valores usados para a simulação
-    double sunMass = 1.989e30;           // Massa do Sol em kg
+    double sunMass = 1.989e40;           // Massa do Sol em kg
     double earthMass = 5.972e24;         // Massa da Terra em kg
     double earthDist = 10.0;             // Distância Terra-Sol em unidades GL
     double earthOrbitalSpeed = 2.0;      // Velocidade orbital inicial da Terra (aumentada)
@@ -340,7 +340,7 @@ void init(void) {
     // Terra (com velocidade inicial tangencial para órbita circular)
     addCelestialObject(
         earthDist, 0.0, 0.0,       // posição inicial
-        0.0, earthOrbitalSpeed, 0.0, // velocidade inicial (tangencial para órbita no eixo Y)
+        0.0, 0.0, earthOrbitalSpeed, // velocidade inicial (tangencial para órbita no plano XZ)
         earthMass,                 // massa em kg
         1.0,                       // raio visual
         earthTexName,              // textura
